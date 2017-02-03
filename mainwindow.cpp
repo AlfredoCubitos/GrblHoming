@@ -11,6 +11,7 @@
 /// qt5
 #include <QPrinter>
 #include <QPrintDialog>
+#include <QSerialPortInfo>
 
 #include "mainwindow.h"
 #include "version.h"
@@ -272,14 +273,16 @@ MainWindow::MainWindow(QWidget *parent) :
     queuedCommandsRefreshTimer.start();
 
     // Cool utility class off Google code that enumerates COM ports in platform-independent manner
-    QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
+   // QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
+    QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
 
     int portIndex = -1;
     for (int i = 0; i < ports.size(); i++)
     {
-        ui->cmbPort->addItem(qPrintable(ports.at(i).portName));
+        //ui->cmbPort->addItem(qPrintable(ports.at(i).portName));
+        ui->cmbPort->addItem(qPrintable(ports.at(i).description()));
 
-        if (ports.at(i).portName == lastOpenPort)
+        if (ports.at(i).description() == lastOpenPort)
             portIndex = i;
 
 //diag("port name: %s\n", qPrintable(ports.at(i).portName));
@@ -305,6 +308,8 @@ MainWindow::MainWindow(QWidget *parent) :
             ui->cmbPort->setCurrentIndex(0);
     }
 
+  /* original version
+   *
     int baudRates[] = { 9600, 19200, 38400, 57600, 115200 };
     int baudRateCount = sizeof baudRates / sizeof baudRates[0];
     int baudRateIndex = 0;
@@ -316,7 +321,24 @@ MainWindow::MainWindow(QWidget *parent) :
         {
             baudRateIndex = i;
         }
+    }*/
+
+   // QList<qint32> baudRates = QSerialPortInfo::standardBaudRates();
+
+    QList<int> baudRates;
+    baudRates << 9600 << 19200 << 38400 << 57600 << 115200;
+    int baudRateIndex = 0;
+
+    for (int i=0; i < baudRates.size(); ++i)
+    {
+        QString baudRate = QString::number(baudRates.at(i));
+        ui->comboBoxBaudRate->addItem(baudRate);
+        if (baudRate == lastBaudRate)
+        {
+            baudRateIndex = i;
+        }
     }
+
     ui->comboBoxBaudRate->setCurrentIndex(baudRateIndex);
 
     ui->tabAxisVisualizer->setEnabled(false);
@@ -1566,7 +1588,7 @@ void MainWindow::readSettings()
     directory = settings.value(SETTINGS_DIRECTORY).value<QString>();
     nameFilter = settings.value(SETTINGS_NAME_FILTER).value<QString>();
     lastOpenPort = settings.value(SETTINGS_PORT).value<QString>();
-    lastBaudRate = settings.value(SETTINGS_BAUD, QString::number(BAUD9600)).value<QString>();
+    lastBaudRate = settings.value(SETTINGS_BAUD, QString::number(9600)).value<QString>();
 
     promptedAggrPreload = settings.value(SETTINGS_PROMPTED_AGGR_PRELOAD, false).value<bool>();
 

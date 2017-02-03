@@ -12,10 +12,13 @@
 
 #include <QtGlobal>
 #include <QMessageBox>
+#include <QSerialPort>
+#include <QThread>
 
+/*
 #include <stdio.h>
 #include <string.h>
-#if defined(Q_OS_LINUX) || defined(Q_OS_MACX) || defined(Q_OS_ANDROID)
+
 #include <termios.h>
 #include "../termiosext.h"
 #include <sys/ioctl.h>
@@ -24,24 +27,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <limits.h>
-#else
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-#include <Windows.h>
-#else
-// TODO - R - if I leave out Windows.h then Sleep is not found???
-#include <Windows.h>
-#include <QtGui/QWindow>
-#endif
-#endif
-
+*/
+/*
 #include <qextserialport.h>
 #include <qextserialenumerator.h>
-
+*/
 #include "definitions.h"
 
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACX) || defined(Q_OS_ANDROID)
-#define SLEEP(x) usleep(1000 * x);
+#define SLEEP(x) QThread::usleep(1000 * x);
 #else
 #define SLEEP(x) Sleep(x);
 #endif
@@ -65,7 +60,8 @@ public:
     void setCharSendDelayMs(int charSendDelayMs);
 
 private:
-    QextSerialPort *port;
+    // QextSerialPort *port;
+    QSerialPort *port;
     char detectedEOL;
     QString detectedLineFeed;
     int charSendDelayMs;

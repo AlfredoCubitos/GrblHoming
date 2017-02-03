@@ -3,7 +3,7 @@ TARGET = GrblController
 
 DEFINES = QT_NO_DEBUG
 
-QT   += core gui printsupport widgets
+QT   += core gui printsupport widgets serialport
 
 # QGlViewer
 QT += xml opengl

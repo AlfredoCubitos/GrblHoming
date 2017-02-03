@@ -9,6 +9,7 @@
 
 #include "rs232.h"
 #include <QObject>
+#include <QSerialPortInfo>
 
 RS232::RS232()
     : port(NULL), detectedEOL(0), charSendDelayMs(DEFAULT_CHAR_SEND_DELAY_MS)
@@ -21,32 +22,41 @@ bool RS232::OpenComport(QString commPortStr, QString baudRate)
         CloseComport();
 
     bool ok;
-    BaudRateType baud = (BaudRateType)baudRate.toInt(&ok);
+    /// BaudRateType baud = (BaudRateType)baudRate.toInt(&ok);
+    qint32 baud = baudRate.toInt(&ok);
     if (!ok)
     {
-        baud = BAUD9600;
+        baud = QSerialPort::Baud9600;
     }
     else
     {
-        int possibleBaudRates[] = {BAUD110,BAUD300,BAUD600,BAUD1200,BAUD2400,BAUD4800,BAUD9600,BAUD19200,BAUD38400,BAUD57600,BAUD115200};
-        int pbrCount = sizeof possibleBaudRates / sizeof possibleBaudRates[0];
+       /// int possibleBaudRates[] = {BAUD110,BAUD300,BAUD600,BAUD1200,BAUD2400,BAUD4800,BAUD9600,BAUD19200,BAUD38400,BAUD57600,BAUD115200};
+        QList<qint32> possibleBaudRates = QSerialPortInfo::standardBaudRates();
 
         bool found = false;
-        for (int i = 0; i < pbrCount; i++)
+        for (int i = 0; i < possibleBaudRates.size(); i++)
         {
-            if (baud == possibleBaudRates[i])
+            if (baud == possibleBaudRates.at(i))
             {
                 found = true;
                 break;
             }
         }
         if (!found)
-            baud = BAUD9600;
+            baud = QSerialPort::Baud9600;
     }
 
-    PortSettings settings = {baud, DATA_8, PAR_NONE, STOP_1, FLOW_OFF, 10};
+   /// PortSettings settings = {baud, DATA_8, PAR_NONE, STOP_1, FLOW_OFF, 10};
 
-    port = new QextSerialPort(commPortStr, settings, QextSerialPort::Polling);
+    /// port = new QextSerialPort(commPortStr, settings, QextSerialPort::Polling);
+
+    port = new QSerialPort();
+    port->setPortName(commPortStr);
+    port->setBaudRate(baud);
+    port->setDataBits(QSerialPort::Data8);
+    port->setParity(QSerialPort::NoParity);
+    port->setStopBits(QSerialPort::OneStop);
+    port->setFlowControl(QSerialPort::NoFlowControl);
 
     port->open(QIODevice::ReadWrite);
 
