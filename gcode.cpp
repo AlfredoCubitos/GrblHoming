@@ -10,6 +10,7 @@
 #include "gcode.h"
 
 #include <QObject>
+#include <QDebug>
 
 GCode::GCode()
     : errorCount(0), doubleDollarFormat(false),
@@ -22,9 +23,10 @@ GCode::GCode()
       checkState(false)
 {
     // use base class's timer - use it to capture random text from the controller
-    startTimer(1000);
+  //  startTimer(1000);
     // for position polling
     pollPosTimer.start();
+
 }
 
 void GCode::openPort(QString commPortStr, QString baudRate)
@@ -35,17 +37,34 @@ void GCode::openPort(QString commPortStr, QString baudRate)
 
     currComPort = commPortStr;
 
-    port.setCharSendDelayMs(controlParams.charSendDelayMs);
+    /// port.setCharSendDelayMs(controlParams.charSendDelayMs);
 
-    if (port.OpenComport(commPortStr, baudRate))
+
+    qint32 baud = baudRate.toInt();
+
+    port = new QSerialPort(this);
+
+    port->setPortName(commPortStr);
+    port->setBaudRate(baud);
+    port->setDataBits(QSerialPort::Data8);
+    port->setParity(QSerialPort::NoParity);
+    port->setStopBits(QSerialPort::OneStop);
+    port->setFlowControl(QSerialPort::NoFlowControl);
+
+    port->open(QIODevice::ReadWrite);
+
+  //  port.OpenComport(commPortStr, baudRate);
+
+    if (isPortOpen())
     {
         emit portIsOpen(true);
         emit sendMsgSatusBar("");
     }
-    else
+
+    if (port->error() == QSerialPort::ReadError)
     {
-        emit portIsClosed(false);
-        QString msg = tr("Can't open COM port ") + commPortStr;
+        emit portIsClosed();
+        QString msg = tr("Can't open COM port ") + commPortStr + " " + port->errorString();
         sendMsgSatusBar(msg);
         addList(msg);
         warn("%s", qPrintable(msg));
@@ -60,15 +79,15 @@ void GCode::openPort(QString commPortStr, QString baudRate)
     }
 }
 
-void GCode::closePort(bool reopen)
+void GCode::closePort()
 {
-    port.CloseComport();
-    emit portIsClosed(reopen);
+    port->close();
+    emit portIsClosed();
 }
 
 bool GCode::isPortOpen()
 {
-    return port.isPortOpen();
+    return port->isOpen();
 }
 
 // Abort means stop file send after the end of this line
@@ -268,6 +287,7 @@ void GCode::goToHomeAxis(char axis)
     }
     else
     {
+        qDebug() << "gotoHomeAxis";
         QString msg(QString(tr("Bad command: %1")).arg(cmd));
         warn("%s", qPrintable(msg));
         emit addList(msg);
@@ -277,9 +297,12 @@ void GCode::goToHomeAxis(char axis)
 }
 
 // Slot called from other threads (i.e. main window, grbl dialog, etc.)
+/*
+ * reimplement to fit QSerilport
 void GCode::sendGcode(QString line)
 {
     bool checkMeasurementUnits = false;
+
 
     // empty line means we have just opened the com port
     if (line.length() == 0)
@@ -303,21 +326,10 @@ void GCode::sendGcode(QString line)
                 buf[0] = CTRL_X;
 
                 diag(qPrintable(tr("SENDING: 0x%02X (CTRL-X) to check presence of Grbl\n")), buf[0])  ;
+                qDebug() << "sendgcode: " << buf[0];
                 if (sendToPort(buf))
                     emit sendMsgSatusBar("");
-                /*
-                if (!port.SendBuf(buf, 1))
-                {
-                    QString msg = tr("Sending to port failed");
-                    err("%s", qPrintable(msg));
-                    emit addList(msg);
-                    emit sendMsgSatusBar(msg);
-                    return;
-                }
-                else {
-                   emit sendMsgSatusBar("");
-                }
-                */
+
             }
 /// <--
             if (!waitForStartupBanner(result, SHORT_WAIT_SEC, true))
@@ -336,6 +348,62 @@ void GCode::sendGcode(QString line)
     }
 
     pollPosWaitForIdle(checkMeasurementUnits);
+}
+*/
+
+void GCode::sendGcode(QString line)
+{
+    bool checkMeasurementUnits = false;
+    QByteArray portData;
+    qDebug() << "Line: " << line;
+
+    portData = port->readAll();
+
+    while (port->waitForReadyRead(PORT_WAIT_MSEC)) {
+        portData.append(port->readAll());
+    }
+    QString result = QString(portData);
+
+    // empty line means we have just opened the com port
+    if (line.isEmpty())
+    {
+         resetState.set(false);
+
+
+         if (!waitForStartupBanner(result, PORT_WAIT_MSEC, false))
+         {
+             if (shutdownState.get() || resetState.get())
+                 return;
+
+             if (versionGrbl != "0.845")
+             {
+                 emit addListOut("(CTRL-X)");
+
+                 char buf[2] = {0};
+
+                 buf[0] = CTRL_X;
+
+                 diag(qPrintable(tr("SENDING: 0x%02X (CTRL-X) to check presence of Grbl\n")), buf[0])  ;
+                 qDebug() << "sendgcode: " << buf[0];
+                 if (sendToPort(buf))
+                     emit sendMsgSatusBar("");
+
+             }
+
+             if (!waitForStartupBanner(result, PORT_WAIT_MSEC, true))
+                 return;
+
+         }
+         checkMeasurementUnits = true;
+    }
+    else
+    {
+        pollPosWaitForIdle(false);
+        // normal send of actual commands
+        sendGcodeLocal(line, false);
+    }
+
+  //  pollPosWaitForIdle(checkMeasurementUnits);
 }
 
 // keep polling our position and state until we are done running
@@ -358,7 +426,7 @@ void GCode::pollPosWaitForIdle(bool checkMeasurementUnits)
             }
             else if (ret == POS_REQ_RESULT_TIMER_SKIP)
             {
-                SLEEP(250);
+                 //SLEEP(250);
                 continue;
             }
 
@@ -402,9 +470,15 @@ void GCode::pollPosWaitForIdle(bool checkMeasurementUnits)
     }
 }
 
-// calls : 'GCode::sendGcodeLocal()':1, 'GCode::waitForStartupBanner()':1
+
+/**
+ * @brief GCode::checkGrbl -> get and set Grbl version
+ * @param result -> query result from GCode::sendGcodeLocal() and GCode::waitForStartupBanner()
+ * @return true if Grbl string found otherwise false
+ */
 bool GCode::checkGrbl(const QString& result)
 {
+    qDebug() << "checkGrbl Result: " << result;
     if (result.contains("Grbl"))
 	{
 /// T2   +  (\\w*)  for 0.8cx
@@ -420,6 +494,7 @@ bool GCode::checkGrbl(const QString& result)
                 int minorVer = list.at(2).toInt();
                 char letter = ' ';
                 char postVer = ' ';   /// T2
+
                 if (list.size() >= 4 && list.at(3).size() > 0)
                 {
                     letter = list.at(3).toLatin1().at(0);
@@ -472,6 +547,7 @@ bool GCode::sendGcodeLocal(QString line, bool recordResponseOnFail /* = false */
     QString result;
     emit sendMsgSatusBar("");
     resetState.set(false);
+    qDebug() << "sendGcodeLocal";
 
     bool ret = sendGcodeInternal(line, result, recordResponseOnFail, waitSec, aggressive, currLine);
     if (shutdownState.get())
@@ -486,12 +562,13 @@ bool GCode::sendGcodeLocal(QString line, bool recordResponseOnFail /* = false */
         if (!ret && resetState.get())
         {
             resetState.set(false);
-            port.Reset();
+            port->reset();
         }
     }
     else
     {
-        if (checkGrbl(result))
+        //if (checkGrbl(result))
+        if(true)
         {
             emit enableGrblDialogButton();
         }
@@ -503,7 +580,8 @@ bool GCode::sendGcodeLocal(QString line, bool recordResponseOnFail /* = false */
 // Wrapped method. Should only be called from above method.
 bool GCode::sendGcodeInternal(QString line, QString& result, bool recordResponseOnFail, int waitSec, bool aggressive, int currLine /* = 0 */)
 {
-    if (!port.isPortOpen())
+
+    if (!isPortOpen())
     {
         QString msg = tr("Port not available yet")  ;
         err("%s", qPrintable(msg));
@@ -514,11 +592,14 @@ bool GCode::sendGcodeInternal(QString line, QString& result, bool recordResponse
     else
         emit sendMsgSatusBar("");
 
+
+
     bool ctrlX = line.size() > 0 ? (line.at(0).toLatin1() == CTRL_X) : false;
 
     bool sentReqForLocation = false;
     bool sentReqForSettings = false;
     bool sentReqForParserState = false;
+
 
     if (checkForGetPosStr(line))
     {
@@ -565,10 +646,12 @@ bool GCode::sendGcodeInternal(QString line, QString& result, bool recordResponse
     if (line.size() == 0 || (!line.endsWith('\r') && !ctrlX))
         line.append('\r');
 
-    char buf[BUF_SIZE + 1] = {0};
-    if (line.length() >= BUF_SIZE)
+    QByteArray buffer; //use instead of char buf
+
+    // if (line.length() >= BUF_SIZE)
+    if (line.isEmpty())
     {
-        QString msg = tr("Buffer size too small");
+        QString msg = tr("No Command");
         err("%s", qPrintable(msg));
         emit addList(msg);
         emit sendMsgSatusBar(msg);
@@ -577,13 +660,12 @@ bool GCode::sendGcodeInternal(QString line, QString& result, bool recordResponse
     else
         emit sendMsgSatusBar("");
 
-    for (int i = 0; i < line.length(); i++)
-        buf[i] = line.at(i).toLatin1();
+    buffer.append(line.toLatin1());
 
     if (ctrlX)
-        diag(qPrintable(tr("SENDING[%d]: 0x%02X (CTRL-X)\n")), currLine, buf[0]);
+        diag(qPrintable(tr("SENDING[%d]: 0x%02X (CTRL-X)\n")), currLine, buffer.data());
     else
-        diag(qPrintable(tr("SENDING[%d]: %s\n")), currLine, buf);
+        diag(qPrintable(tr("SENDING[%d]: %s\n")), currLine, buffer.data());
 
     int waitSecActual = waitSec == -1 ? controlParams.waitTime : waitSec;
 
@@ -592,80 +674,95 @@ bool GCode::sendGcodeInternal(QString line, QString& result, bool recordResponse
         if (ctrlX)
             sendCount.append(CmdResponse("(CTRL-X)", line.length(), currLine));
         else
-            sendCount.append(CmdResponse(buf, line.length(), currLine));
+            sendCount.append(CmdResponse(buffer, line.length(), currLine));
 
 //diag("DG Buffer Add %d", sendCount.size());
 
         emit setQueuedCommands(sendCount.size(), true);
 /// T4
-        waitForOk(result, waitSecActual, false, false, false, aggressive, false);
+      ///?  waitForOk(result, waitSecActual, false, false, false, aggressive, false);
 
         if (shutdownState.get())
             return false;
     }
 
-    if (!port.SendBuf(buf, line.length()))
-    {
-        QString msg = tr("Sending to port failed")  ;
-        err("%s", qPrintable(msg));
-        emit addList(msg);
-        emit sendMsgSatusBar(msg);
-        return false;
-    }
-    else
-    {
-        emit sendMsgSatusBar("");
-        sentI++;
-/// T4
-        if (!waitForOk(result, waitSecActual, sentReqForLocation, sentReqForSettings,
-                        sentReqForParserState, aggressive, false))
-        {
-            diag(qPrintable(tr("WAITFOROK FAILED\n")));
-            if (shutdownState.get())
-                return false;
 
-            if (!recordResponseOnFail && !(resetState.get() || abortState.get()))
-            {
-                QString msg = tr("Wait for ok failed");
-                emit addList(msg);
-                emit sendMsgSatusBar(msg);
-            }
-            else
-                emit sendMsgSatusBar("");
+     qint64 bytesWritten =port->write(buffer);
+     qDebug() << "sendGcodeInternal" << line << "written:" << bytesWritten;
+     QByteArray data = port->readAll();
 
-            return false;
-        }
-        else
+     while(port->waitForReadyRead(PORT_WAIT_MSEC))
+        data.append(port->readAll());
+
+     QStringList dataList = QString(data).split("\r\n");
+
+     if (!dataList.isEmpty())
+     {
+         QString tmp = dataList.last();
+         if(tmp.isEmpty())
+             dataList.removeLast();
+
+     }
+
+     qDebug() << ">" << data << dataList.at(0) <<":" <<dataList.at(1) << dataList.size() << port->errorString();
+
+     if (bytesWritten == -1)
+     {
+         QString msg = tr("Sending data to port failed") + port->errorString() ;
+         err("%s", qPrintable(msg));
+         emit addList(msg);
+         emit sendMsgSatusBar(msg);
+         return false;
+     }else if(bytesWritten != buffer.size())
+     {
+         QString msg = tr("Could not send all data to port: ") + port->errorString()  ;
+         err("%s", qPrintable(msg));
+         emit addList(msg);
+         emit sendMsgSatusBar(msg);
+         return false;
+
+     }else if(data.contains(RESPONSE_ERROR)){
+         QString msg = QString(data) +" "+ port->errorString();
+         err("%s", qPrintable(msg));
+         emit addList(msg);
+         emit sendMsgSatusBar(msg);
+         return false;
+     }else{
+         emit sendMsgSatusBar("");
+         sentI++;
+
+        if (sentReqForSettings)
         {
-            if (sentReqForSettings)
+qDebug() << "sentReqFor ";
+            QStringList list = result.split("$");
+            for (int i = 0; i < list.size(); i++)
             {
-                QStringList list = result.split("$");
-                for (int i = 0; i < list.size(); i++)
+                QString item = list.at(i);
+                const QRegExp rx(REGEXP_SETTINGS_LINE);
+
+                if (rx.indexIn(item, 0) != -1 && rx.captureCount() == 3)
                 {
-                    QString item = list.at(i);
-                    const QRegExp rx(REGEXP_SETTINGS_LINE);
-
-                    if (rx.indexIn(item, 0) != -1 && rx.captureCount() == 3)
+                    QStringList capList = rx.capturedTexts();
+                    /// T4 with 0.9x 13 is not good !!
+                    /// 0.8c->$13, 0.8c1/2->$14, 0.9d->$20, 0.9e/f->$19 , 09g -> $13  ( 0.845  ?? )
+                    QString val = getNumGrblUnit();
+                    //diag ("getNumGrblUnit() =  %s", qPrintable(val) ) ;
+                    if (!capList.at(1).compare(val))
                     {
-                        QStringList capList = rx.capturedTexts();
-/// T4 with 0.9x 13 is not good !!
-/// 0.8c->$13, 0.8c1/2->$14, 0.9d->$20, 0.9e/f->$19 , 09g -> $13  ( 0.845  ?? )
-                        QString val = getNumGrblUnit();
-//diag ("getNumGrblUnit() =  %s", qPrintable(val) ) ;
-                        if (!capList.at(1).compare(val))
-                        {
-                            bool Grblg20 = capList.at(2).compare("0"),
-                                 g21 = controlParams.useMm ;
-                            incorrectLcdDisplayUnits = Grblg20 == g21;
+                        bool Grblg20 = capList.at(2).compare("0"),
+                                g21 = controlParams.useMm ;
+                        incorrectLcdDisplayUnits = Grblg20 == g21;
 
-                            break;
-                        }
+                        break;
                     }
                 }
                 settingsItemCount.set(list.size());
             }
         }
-    }
+         sendStatusList(dataList);
+     }
+
+
     return true;
 }
 
@@ -695,16 +792,18 @@ QString GCode::getNumGrblUnit()
 
 ///-----------------------------------------------------------------------------
 /// T4 +  'bool sentRequestForSettings'
+///
 bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
                         bool sentRequestForSettings, bool sentReqForParserState,
                         bool aggressive, bool finalize)
 {
     int okcount = 0;
 
+
     if (aggressive)
     {
         //if (!port.bytesAvailable()) //more conservative code
-        if (!finalize || !port.bytesAvailable())
+        if (!finalize || !port->waitForBytesWritten(3000))
         {
             int total = 0;
             bool haveWait = false;
@@ -735,14 +834,15 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
     result.clear();
     while (!result.contains(RESPONSE_OK) && !result.contains(RESPONSE_ERROR) && !resetState.get())
     {
-        int n = port.PollComportLine(tmp, BUF_SIZE);
+        /// int n = port.PollComportLine(tmp, BUF_SIZE);
+        int n = port->bytesAvailable();
         if (n == 0)
         {
             if (aggressive && sendCount.size() == 0)
                 return false;
 
             count++;
-            SLEEP(100);
+             //SLEEP(100);
         }
         else
         if (n < 0)
@@ -759,9 +859,10 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
             result.append(tmp);
 
             QString tmpTrim(tmp);
-            int pos = tmpTrim.indexOf(port.getDetectedLineFeed());
+           /* int pos = tmpTrim.indexOf(port.getDetectedLineFeed());
             if (pos != -1)
                 tmpTrim.remove(pos, port.getDetectedLineFeed().size());
+            */
             QString received(tmp);
 
             if (aggressive)
@@ -824,7 +925,7 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
                     continue;
                 }
                 else
-                if (port.bytesAvailable())
+                if (port->bytesAvailable())
                 {
                     // comment out this block for more conservative approach
                     if (!finalize && okcount > 0)
@@ -877,7 +978,7 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
             count = 0;
         }
 
-        SLEEP(100);
+    //     SLEEP(100);
 
         if (count > waitCount)
         {
@@ -895,7 +996,7 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
     if (status)
     {
         if (!aggressive)
-            SLEEP(100);
+         //    SLEEP(100);
 
         if (resetState.get())
         {
@@ -912,7 +1013,8 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
         //status = false;
     }
 
-    QStringList list = QString(result).split(port.getDetectedLineFeed());
+   // QStringList list = QString(result).split(port.getDetectedLineFeed());
+    QStringList list = QString(result).split(QRegExp("\\n|\\r\\n"));
     QStringList listToSend;
 /// T4
     bool banned =  sentReqForLocation || sentRequestForSettings;
@@ -934,123 +1036,53 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
 }
 
 ///-----------------------------------------------------------------------------
+/**
+ * @brief GCode::waitForStartupBanner
+ * @param result -> needed?
+ * @param waitSec -> in msec for QSerialPort::waitForReadyRead
+ * @param failOnNoFound ?
+ * @return bool
+ */
 bool GCode::waitForStartupBanner(QString& result, int waitSec, bool failOnNoFound)
 {
-    char tmp[BUF_SIZE + 1] = {0};
-    int count = 0;
-    int waitCount = waitSec * 10;// multiplier depends on sleep values below
     bool status = true;
-    result.clear();
-    while (!resetState.get())
+
+    if (result.isEmpty())
     {
-        int n = port.PollComportLine(tmp, BUF_SIZE);
-        if (n == 0)
-        {
-            count++;
-            SLEEP(100);
-        }
-        else if (n < 0)
-        {
-            err(qPrintable(tr("Error reading data from COM port\n")) );
-        }
-        else
-        {
-            tmp[n] = 0;
-            result.append(tmp);
+        QString msg(tr("No data from COM port after connect. Expecting Grbl version string."));
+        emit addList(msg);
+        emit sendMsgSatusBar(msg);
 
-            QString tmpTrim(tmp);
-            int pos = tmpTrim.indexOf(port.getDetectedLineFeed());
-            if (pos != -1)
-                tmpTrim.remove(pos, port.getDetectedLineFeed().size());
-            diag(qPrintable(tr("GOT:%s\n")), qPrintable(tmpTrim));
-
-            if (tmpTrim.length() > 0)
-            {
-                if (!checkGrbl(tmpTrim))
-                {
-                    if (failOnNoFound)
-                    {
-                        QString msg(tr("Expecting Grbl version string. Unable to parse response."));
-                        emit addList(msg);
-                        emit sendMsgSatusBar(msg);
-
-                        closePort(false);
-                    }
-                    else
-                        emit sendMsgSatusBar("");
-
-                    status = false;
-                }
-                else
-                {
-                    emit enableGrblDialogButton();
-                }
-                break;
-            }
-        }
-
-        SLEEP(100);
-
-        if (count > waitCount)
+    }else{
+        if (!checkGrbl(QString(result.trimmed())))
         {
             if (failOnNoFound)
             {
-                // waited too long for a response, fail
-
-                QString msg(tr("No data from COM port after connect. Expecting Grbl version string."));
+                QString msg(tr("Expecting Grbl version string. Unable to parse response."));
                 emit addList(msg);
                 emit sendMsgSatusBar(msg);
 
-                closePort(false);
+                closePort();
             }
             else
                 emit sendMsgSatusBar("");
 
             status = false;
-            break;
         }
-    }
-
-    if (shutdownState.get())
-    {
-        return false;
-    }
-
-    if (status)
-    {
-        if (resetState.get())
+        else
         {
-            QString msg(tr("Wait interrupted by user (startup)"));
-            err("%s", qPrintable(msg));
-            emit addList(msg);
+            emit enableGrblDialogButton();
         }
     }
 
-    if (result.contains(RESPONSE_ERROR))
-    {
-        errorCount++;
-        // skip over errors
-        //status = false;
-    }
-
-    QStringList list = QString(result).split(port.getDetectedLineFeed());
-    QStringList listToSend;
-    for (int i = 0; i < list.size(); i++)
-    {
-        if (list.at(i).length() > 0 && list.at(i) != RESPONSE_OK)
-            listToSend.append(list.at(i));
-    }
-
-    sendStatusList(listToSend);
-
-    if (resetState.get())
-    {
-        // we have been told by the user to stop.
-        status = false;
-    }
+    qDebug() << result;
+    QStringList list(result);
+    sendStatusList(list);
 
     return status;
 }
+
+
 
 /// T1
 /* *****************************************************************************
@@ -1233,14 +1265,15 @@ void GCode::timerEvent(QTimerEvent *event)
 {
     Q_UNUSED(event);
 
-    if (port.isPortOpen())
+    if (isPortOpen())
     {
         char tmp[BUF_SIZE + 1] = {0};
         QString result;
 
         for (int i = 0; i < 10 && !shutdownState.get() && !resetState.get(); i++)
         {
-            int n = port.PollComport(tmp, BUF_SIZE);
+            // int n = port.PollComport(tmp, BUF_SIZE);
+            int n = port->bytesAvailable();
             if (n == 0)
                 break;
 
@@ -1254,13 +1287,13 @@ void GCode::timerEvent(QTimerEvent *event)
             return;
         }
 
-        QStringList list = QString(result).split(port.getDetectedLineFeed());
+     //   QStringList list = QString(result).split(port.getDetectedLineFeed());
         QStringList listToSend;
-        for (int i = 0; i < list.size(); i++)
+      /*  for (int i = 0; i < list.size(); i++)
         {
             if (list.at(i).length() > 0 && (list.at(i) != "ok" || (list.at(i) == "ok" && abortState.get())))
                 listToSend.append(list.at(i));
-        }
+        }*/
 
         sendStatusList(listToSend);
     }
@@ -1426,7 +1459,7 @@ void GCode::sendFile(QString path, bool checkfile)
                 QString result;
 /// T4
                 waitForOk(result, controlParams.waitTime, false, false, false, aggressive, true);
-                SLEEP(100);
+              //   SLEEP(100);
 
                 if (shutdownState.get())
                     return;
@@ -2057,6 +2090,7 @@ void GCode::gotoXYZFourth(QString line)
     }
     else
     {
+        qDebug() << "gotoXYZFourth";
         QString msg(QString(tr("Bad command: %1")).arg(line));
         warn("%s", qPrintable(msg));
         emit addList(msg);
@@ -2135,7 +2169,7 @@ void GCode::setResponseWait(ControlParams controlParamsIn)
 
     controlParams.useMm = oldMm;
 
-    port.setCharSendDelayMs(controlParams.charSendDelayMs);
+   // port.setCharSendDelayMs(controlParams.charSendDelayMs);
 
     if ((oldMm != controlParamsIn.useMm) && isPortOpen() && doubleDollarFormat)
     {
@@ -2307,7 +2341,9 @@ void GCode::setPosReqKind(int posreqkind)
 // calls: 'GCode::sendGcode()':1,  'GCode::sendFile()':2
 bool GCode::sendToPort(const char *buf, QString txt)
 {
-    if (!port.SendBuf(buf, 1))
+    port->write(QByteArray(buf));
+   // if (!port.SendBuf(buf, 1))
+    if(port->waitForBytesWritten(3000))
     {
         QString msg = tr("Sending to port failed");
         err("%s", qPrintable(msg));

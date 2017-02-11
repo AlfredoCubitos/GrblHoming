@@ -12,6 +12,7 @@
 #include <QPrinter>
 #include <QPrintDialog>
 #include <QSerialPortInfo>
+#include <QDebug>
 
 #include "mainwindow.h"
 #include "version.h"
@@ -23,7 +24,7 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow), opt(this),
     open_button_text(tr("Open")),
-    close_button_text(tr("Close / Reset")),
+    close_button_text(tr("Close")),
     absoluteAfterAxisAdj(false),
     checkLogWrite(false),
     sliderPressed(false),
@@ -163,7 +164,7 @@ MainWindow::MainWindow(QWidget *parent) :
 /// T3
     connect(this, SIGNAL(sendFile(QString, bool)), &gcode, SLOT(sendFile(QString, bool)));
     connect(this, SIGNAL(openPort(QString,QString)), &gcode, SLOT(openPort(QString,QString)));
-    connect(this, SIGNAL(closePort(bool)), &gcode, SLOT(closePort(bool)));
+    connect(this, SIGNAL(closePort()), &gcode, SLOT(closePort()));
     connect(this, SIGNAL(sendGcode(QString)), &gcode, SLOT(sendGcode(QString)));
     connect(this, SIGNAL(gotoXYZFourth(QString)), &gcode, SLOT(gotoXYZFourth(QString)));
     connect(this, SIGNAL(axisAdj(char, float, bool, bool, int)), &gcode, SLOT(axisAdj(char, float, bool, bool, int)));
@@ -195,7 +196,7 @@ MainWindow::MainWindow(QWidget *parent) :
    // connect(ui->BBcheckBox, SIGNAL(clicked(bool)), ui->visu3D, SLOT(setBbox(bool)() ) ) ;
 
     connect(&gcode, SIGNAL(sendMsgSatusBar(QString)),this,SLOT(receiveMsgSatusBar(QString)));
-    connect(&gcode, SIGNAL(portIsClosed(bool)), this, SLOT(portIsClosed(bool)));
+    connect(&gcode, SIGNAL(portIsClosed()), this, SLOT(portIsClosed()));
     connect(&gcode, SIGNAL(portIsOpen(bool)), this, SLOT(portIsOpen(bool)));
     connect(&gcode, SIGNAL(addList(QString)),this,SLOT(receiveList(QString)));
     connect(&gcode, SIGNAL(addListFull(QStringList)),this,SLOT(receiveListFull(QStringList)));
@@ -263,6 +264,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->btnClearStatusList, SIGNAL(clicked() ), this, SLOT(toClearSatusList()) ) ;
     connect(ui->btnPrintStatusList, SIGNAL(clicked() ), this, SLOT(toPrintStatusList()) ) ;
     connect(ui->btnPrintVisual, SIGNAL(clicked() ), this, SLOT(toPrintVisual()) ) ;
+    connect(ui->cmbPort,SIGNAL(activated(QString)),this,SLOT(setPortName(QString)));
+    connect(ui->btnResetPort,SIGNAL(clicked()),this,SLOT(portReset()));
 
 /// end connect
     /// start threads
@@ -272,24 +275,16 @@ MainWindow::MainWindow(QWidget *parent) :
     queuedCommandsEmptyTimer.start();
     queuedCommandsRefreshTimer.start();
 
-    // Cool utility class off Google code that enumerates COM ports in platform-independent manner
-   // QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
     QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
 
     int portIndex = -1;
+    ui->cmbPort->addItem("");
     for (int i = 0; i < ports.size(); i++)
     {
-        //ui->cmbPort->addItem(qPrintable(ports.at(i).portName));
-        ui->cmbPort->addItem(qPrintable(ports.at(i).description()));
+        ui->cmbPort->addItem(qPrintable(ports.at(i).portName()));
 
-        if (ports.at(i).description() == lastOpenPort)
+        if (ports.at(i).portName() == lastOpenPort)
             portIndex = i;
-
-//diag("port name: %s\n", qPrintable(ports.at(i).portName));
-//diag("friendly name: %s\n", qPrintable(ports.at(i).friendName));
-//diag("physical name: %s\n", qPrintable(ports.at(i).physName)));
-//diag("enumerator name: %s\n", qPrintable(ports.at(i).enumName)));
-//diag("===================================\n\n");
     }
 
     if (portIndex >= 0)
@@ -308,20 +303,6 @@ MainWindow::MainWindow(QWidget *parent) :
             ui->cmbPort->setCurrentIndex(0);
     }
 
-  /* original version
-   *
-    int baudRates[] = { 9600, 19200, 38400, 57600, 115200 };
-    int baudRateCount = sizeof baudRates / sizeof baudRates[0];
-    int baudRateIndex = 0;
-    for (int i = 0; i < baudRateCount; i++)
-    {
-        QString baudRate = QString::number(baudRates[i]);
-        ui->comboBoxBaudRate->addItem(baudRate);
-        if (baudRate == lastBaudRate)
-        {
-            baudRateIndex = i;
-        }
-    }*/
 
    // QList<qint32> baudRates = QSerialPortInfo::standardBaudRates();
 
@@ -458,7 +439,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     info(qPrintable(tr("%s has stopped")), GRBL_CONTROLLER_NAME_AND_VERSION);
 
-    SLEEP(300);
+    /// SLEEP(300);
+
 
     emit shutdown();
 
@@ -765,7 +747,12 @@ void MainWindow::openPort()
 	QString Mes = tr("User clicked Port Open/Close");
     info(qPrintable(Mes) );
 
-    openPortCtl(false);
+    QSerialPortInfo pinfo(portStr);
+
+    if(pinfo.isBusy())
+       closeSerialPort();
+    else
+      openPortCtl();
 }
 
 // User has asked to set current position as 'home' = 0,0,0
@@ -784,19 +771,13 @@ void MainWindow::resetProgress()
     setRuntime("");
 }
 
-// If the port isn't open, we ask to open it
-// If the port is open, we close it, but if 'reopen' is
-// true, we call back to this thread to reopen it which
-// is done mainly to toggle the COM port state to reset
-// the controller.
-void MainWindow::openPortCtl(bool reopen)
+
+void MainWindow::openPortCtl()
 {
-    if (ui->btnOpenPort->text() == open_button_text)
-    {
-        // Port is closed if the button says 'Open'
-        QString portStr = ui->cmbPort->currentText();
+
+        portStr = ui->cmbPort->currentText();
         QString baudRate = ui->comboBoxBaudRate->currentText();
-/// T2
+
         ui->labelLines->setEnabled(false);
         ui->outputLines->setEnabled(false);
 
@@ -805,32 +786,47 @@ void MainWindow::openPortCtl(bool reopen)
 
         ui->btnClearStatusList->setEnabled(true);
         ui->btnPrintStatusList->setEnabled(true);
-/// T4
+
         if (ui->tabVisu->currentIndex() != TAB_CONSOLE_INDEX)
         {
             emit ui->tabVisu->setCurrentIndex(TAB_CONSOLE_INDEX);
         }
 
         emit openPort(portStr, baudRate);
-    }
-    else
+
+
+}
+
+/**
+ * @brief MainWindow::portReset SLOT to reset serial port
+ */
+void MainWindow::portReset()
+{
+    resetProgress();
+
+    // Tell gcode port thread to stop what it is doing immediately (within 0.1 sec)
+    gcode.setAbort();
+    gcode.setReset();
+
+
+
+}
+
+void MainWindow::closeSerialPort()
+{
+    closePortHelper();
+    emit closePort();
+}
+
+void MainWindow::closePortHelper()
+{
+    // Disable a bunch of UI
+    /// T2
+    ui->labelLines->setEnabled(false);
+    ui->outputLines->setEnabled(false);
+    /// T3
+    ui->openFile->setEnabled(true);
     {
-        if (!reopen)
-            resetProgress();
-
-        // presume button says 'Close' currently, meaning port is open
-
-        // Tell gcode port thread to stop what it is doing immediately (within 0.1 sec)
-        gcode.setAbort();
-        gcode.setReset();
-
-        // Disable a bunch of UI
-/// T2
-        ui->labelLines->setEnabled(false);
-        ui->outputLines->setEnabled(false);
-/// T3
-         ui->openFile->setEnabled(true);
-        {
         ui->Begin->setEnabled(false);
         ui->Stop->setEnabled(false);
         ui->btnPause->setEnabled(false);
@@ -840,28 +836,28 @@ void MainWindow::openPortCtl(bool reopen)
         ui->labelQueuedCommands->setEnabled(false);
         ui->outputRuntime->setEnabled(false);
         ui->labelRuntime->setEnabled(false);
-        }
-/// T4
-        ui->tabAxisVisualizer->setEnabled(ui->visualButton->isChecked());
-        ui->comboCommand->setEnabled(false);
-        ui->labelCommand->setEnabled(false);
-
-        enableButtonGrblControls(false) ;
-        // invalid manual controls
-        enableManualControl(false);
-/// T2
-		ui->GrblVersion->setText(tr("none"));
-        // Send event to close the port
-        emit closePort(reopen);
     }
+    /// T4
+    ui->tabAxisVisualizer->setEnabled(ui->visualButton->isChecked());
+    ui->comboCommand->setEnabled(false);
+    ui->labelCommand->setEnabled(false);
+
+    enableButtonGrblControls(false) ;
+    // invalid manual controls
+    enableManualControl(false);
+    /// T2
+    ui->GrblVersion->setText(tr("none"));
+
 }
+
+
 
 // slot telling us that port was closed successfully
 // if 'reopen' is true, reopen our port to toggle
 // so we reset the controller
-void MainWindow::portIsClosed(bool reopen)
+void MainWindow::portIsClosed()
 {
-    SLEEP(100);
+    /// SLEEP(100);
 
     ui->tabAxisVisualizer->setEnabled(false);
 
@@ -906,11 +902,7 @@ void MainWindow::portIsClosed(bool reopen)
     // Grbl commands
     enableButtonGrblControls(false);
 
-    if (reopen)
-    {
-        receiveList(tr("Resetting port to restart controller"));
-        openPortCtl(false);
-    }
+
 /// T4
     openState =  false;
 }
@@ -1851,7 +1843,9 @@ void MainWindow::addToStatusList(bool in, QString msg)
     if (!in)
         nMsg = "> " + msg;
 
-    ui->statusList->appendPlainText( nMsg );
+
+   ui->statusList->appendPlainText( nMsg );
+  //  ui->statusList->insertPlainText( nMsg );
 }
 
 void MainWindow::addToStatusList(QStringList& list)
@@ -2594,3 +2588,18 @@ void MainWindow::setLastState(QString state)
     ui->outputLastState->setText(state);
 }
 //------------------------------------------------------------------------------
+/**
+ * @brief MainWindow::setPortName SLOT setting portname when port changed
+ */
+void MainWindow::setPortName(QString name)
+{
+    QSerialPortInfo pi(name);
+    QString pname = pi.description();
+
+    if (pname.isEmpty())
+        ui->le_portname->setText("no description");
+    else
+        ui->le_portname->setText(pname);
+
+    ui->btnOpenPort->setEnabled(true);
+}

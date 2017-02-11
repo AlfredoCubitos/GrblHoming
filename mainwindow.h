@@ -29,9 +29,9 @@
 #include "renderarea.h"
 #include "visu3D/viewer3D.h"
 
-#define COMPANY_NAME "zapmaker"
+#define COMPANY_NAME "NoName"
 #define APPLICATION_NAME "GrblController"
-#define DOMAIN_NAME "org.zapmaker"
+#define DOMAIN_NAME "NoDomain"
 
 /// T4
 #define TAB_VISUALIZER_INDEX    0
@@ -63,7 +63,7 @@ public:
 signals:
     //threads
     void openPort(QString port, QString baudRate);
-    void closePort(bool reopen);
+    void closePort();
     void shutdown();
     void sendGcode(QString line, bool recordResponseOnFail = false, int waitCount = SHORT_WAIT_SEC);
 /// T3
@@ -155,7 +155,7 @@ void grblFeedHold();
     void stopSending();
     //
     void portIsOpen(bool sendCode);
-    void portIsClosed(bool reopen);
+    void portIsClosed();
     void adjustedAxis();
 
     void toggleSpindle(bool);
@@ -212,6 +212,9 @@ void grblFeedHold();
 
     void setLastState(QString state);
 
+    void setPortName(QString name);
+    void portReset();
+
 
 private:
     // enums
@@ -244,6 +247,7 @@ private:
 	/// for translation
 	QString open_button_text ;
 	QString close_button_text ;
+    QString portStr;
     bool mm;
     QString styleSheet;
     QString directory;
@@ -292,13 +296,15 @@ private:
     void addToStatusList(bool in, QString msg);
     void addToStatusList(QStringList& list);
     void enableAllButtons(bool);
-    void openPortCtl(bool reopen);
+    void openPortCtl();
     void resetProgress();
     void refreshLcd();
     void lcdDisplay(char axis, bool workCoord, float value);
     void updateSettingsFromOptionDlg(QSettings& settings);
     int computeListViewMinimumWidth(QAbstractItemView* view);
     void preProcessFile(QString filepath);
+    void closePortHelper();
+    void closeSerialPort();
 
 /// T4  3 axes + plane
     bool processGCode(QString inputLine,

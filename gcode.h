@@ -16,8 +16,10 @@
 #include <QFile>
 #include <QThread>
 #include <QTextStream>
+#include <QSerialPort>
+#include <QTimer>
+
 #include "definitions.h"
-#include "rs232.h"
 #include "coord3d.h"
 #include "controlparams.h"
 
@@ -25,6 +27,8 @@
 
 #define RESPONSE_OK "ok"
 #define RESPONSE_ERROR "error"
+
+#define PORT_WAIT_MSEC 5000
 
 // as defined in the grbl project on github...
 #define GRBL_RX_BUFFER_SIZE     128
@@ -85,7 +89,7 @@ signals:
     void addListOut(QString line);
     void sendMsgSatusBar(QString msg);
     void stopSending();
-    void portIsClosed(bool reopen);
+    void portIsClosed();
     void portIsOpen(bool sendCode);
     void setCommandText(QString value);
     void adjustedAxis();
@@ -115,7 +119,7 @@ signals:
 
 public slots:
     void openPort(QString commPortStr, QString baudRate);
-    void closePort(bool reopen);
+    void closePort();
     void sendGcode(QString line);
     void sendGcodeAndGetResult(int id, QString line);
 ///  T3
@@ -145,6 +149,8 @@ public slots:
 
     QString removeUnsupportedCommands(QString line);
 
+
+
 protected:
     void timerEvent(QTimerEvent *event);
 
@@ -162,7 +168,7 @@ private:
     bool waitForOk(QString& result, int waitCount, bool sentReqForLocation,
                     bool sentRequestForSettings, bool sentReqForParserState,
                     bool aggressive, bool finalize);
-    bool waitForStartupBanner(QString& result, int waitSec, bool failOnNoFound);
+    bool waitForStartupBanner(QString& result, int waitSec = 5000, bool failOnNoFound=false);
     bool sendGcodeInternal(QString line, QString& result, bool recordResponseOnFail, int waitSec, bool aggressive, int currLine = 0);
     QString reducePrecision(QString line);
     bool isGCommandValid(float value, bool& toEndOfLine);
@@ -190,7 +196,8 @@ private:
     void gotoPause();
 
 private:
-    RS232 port;
+    QSerialPort *port;
+
     AtomicIntBool abortState;
     AtomicIntBool resetState;
     AtomicIntBool shutdownState;
@@ -225,6 +232,9 @@ private:
 /// T4
     int posReqKind;
     QString versionGrbl;
+
+
+
 };
 
 #endif // GCODE_H

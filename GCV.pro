@@ -34,7 +34,6 @@ include(log4qt/log4qt.pri)
 
 SOURCES += main.cpp\
     mainwindow.cpp \
-    rs232.cpp \
     options.cpp \
     grbldialog.cpp \
     about.cpp \
@@ -58,7 +57,6 @@ SOURCES += main.cpp\
     visu3D/Box3D.cpp
 
 HEADERS  += mainwindow.h \
-    rs232.h \
     options.h \
     grbldialog.h \
     definitions.h \
