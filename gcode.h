@@ -162,6 +162,7 @@ private:
         POS_REQ_RESULT_TIMER_SKIP,
         POS_REQ_RESULT_UNAVAILABLE
     };
+
 private:
     bool sendGcodeLocal(QString line, bool recordResponseOnFail = false, int waitSec = -1, bool aggressive = false, int currLine = 0);
 /// T4

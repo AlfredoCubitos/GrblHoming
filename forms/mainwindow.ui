@@ -63,8 +63,13 @@
             <height>90</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>9</pointsize>
+           </font>
+          </property>
           <property name="title">
-           <string>Serial-Port</string>
+           <string>Serialport</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignCenter</set>
@@ -78,9 +83,9 @@
            </property>
            <property name="geometry">
             <rect>
-             <x>0</x>
+             <x>9</x>
              <y>30</y>
-             <width>80</width>
+             <width>71</width>
              <height>24</height>
             </rect>
            </property>
@@ -100,9 +105,9 @@
           <widget class="QPushButton" name="btnResetPort">
            <property name="geometry">
             <rect>
-             <x>0</x>
+             <x>9</x>
              <y>60</y>
-             <width>80</width>
+             <width>71</width>
              <height>24</height>
             </rect>
            </property>
@@ -115,24 +120,24 @@
             <rect>
              <x>80</x>
              <y>20</y>
-             <width>322</width>
-             <height>75</height>
+             <width>301</width>
+             <height>78</height>
             </rect>
            </property>
-           <layout class="QGridLayout" name="gridLayout" columnstretch="0,0,0,0" rowminimumheight="0,0,0,0">
+           <layout class="QGridLayout" name="gridLayout" columnstretch="0,0,0">
             <property name="sizeConstraint">
              <enum>QLayout::SetDefaultConstraint</enum>
             </property>
             <property name="leftMargin">
-             <number>6</number>
+             <number>9</number>
             </property>
             <property name="rightMargin">
-             <number>0</number>
+             <number>9</number>
             </property>
             <property name="horizontalSpacing">
              <number>3</number>
             </property>
-            <item row="2" column="3">
+            <item row="2" column="2">
              <widget class="QComboBox" name="comboBoxBaudRate">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -142,7 +147,7 @@
               </property>
               <property name="minimumSize">
                <size>
-                <width>0</width>
+                <width>90</width>
                 <height>0</height>
                </size>
               </property>
@@ -161,7 +166,7 @@
               </property>
               <property name="minimumSize">
                <size>
-                <width>140</width>
+                <width>90</width>
                 <height>0</height>
                </size>
               </property>
@@ -175,6 +180,12 @@
             </item>
             <item row="2" column="0">
              <widget class="QLineEdit" name="le_portname">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
               <property name="mouseTracking">
                <bool>false</bool>
               </property>
@@ -192,7 +203,7 @@
               </property>
              </widget>
             </item>
-            <item row="0" column="3">
+            <item row="0" column="2">
              <widget class="QLabel" name="label_br">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
@@ -288,6 +299,9 @@
         <property name="title">
          <string>Send File</string>
         </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
         <layout class="QVBoxLayout" name="verticalLayout_12">
          <item>
           <layout class="QGridLayout" name="gridLayout_2" rowstretch="0,0,0,0,0" columnstretch="0,0,0,0,0">
@@ -301,17 +315,6 @@
              </property>
             </widget>
            </item>
-           <item row="4" column="0">
-            <widget class="QPushButton" name="openFile">
-             <property name="toolTip">
-              <string>load a file for animation
- or send to Grbl</string>
-             </property>
-             <property name="text">
-              <string>Choose file</string>
-             </property>
-            </widget>
-           </item>
            <item row="4" column="3">
             <widget class="QPushButton" name="Begin">
              <property name="toolTip">
@@ -319,16 +322,6 @@
              </property>
              <property name="text">
               <string>Begin</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0" colspan="5">
-            <widget class="QLineEdit" name="filePath">
-             <property name="toolTip">
-              <string>shows the full name of the loaded file</string>
-             </property>
-             <property name="readOnly">
-              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -360,6 +353,30 @@
               </size>
              </property>
             </spacer>
+           </item>
+           <item row="0" column="2" colspan="3">
+            <widget class="QLineEdit" name="filePath">
+             <property name="toolTip">
+              <string>shows the full name of the loaded file</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: rgb(227, 227, 227);</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QPushButton" name="openFile">
+             <property name="toolTip">
+              <string>load a file for animation
+ or send to Grbl</string>
+             </property>
+             <property name="text">
+              <string>Choose file</string>
+             </property>
+            </widget>
            </item>
           </layout>
          </item>
@@ -578,7 +595,7 @@
         <item>
          <widget class="QLabel" name="labelCommand">
           <property name="text">
-           <string>Command</string>
+           <string>Gbrl-Command</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignCenter</set>

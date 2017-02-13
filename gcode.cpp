@@ -42,6 +42,8 @@ void GCode::openPort(QString commPortStr, QString baudRate)
 
     qint32 baud = baudRate.toInt();
 
+    qDebug() << "openPort: " << baud << commPortStr;
+
     port = new QSerialPort(this);
 
     port->setPortName(commPortStr);
@@ -51,31 +53,29 @@ void GCode::openPort(QString commPortStr, QString baudRate)
     port->setStopBits(QSerialPort::OneStop);
     port->setFlowControl(QSerialPort::NoFlowControl);
 
-    port->open(QIODevice::ReadWrite);
 
-  //  port.OpenComport(commPortStr, baudRate);
 
-    if (isPortOpen())
+
+    if (port->open(QIODevice::ReadWrite))
     {
         emit portIsOpen(true);
         emit sendMsgSatusBar("");
-    }
-
-    if (port->error() == QSerialPort::ReadError)
-    {
+    }else{
         emit portIsClosed();
-        QString msg = tr("Can't open COM port ") + commPortStr + " " + port->errorString();
+        QString msg = tr("Can't open COM port ") + commPortStr;
         sendMsgSatusBar(msg);
         addList(msg);
         warn("%s", qPrintable(msg));
 
+        addList(tr("Error :") + port->errorString());
         addList(tr("-Is hardware connected to USB?") );
+        addList(tr("-Is another process using this port?") );
         addList(tr("-Is correct port chosen?") );
         addList(tr("-Does current user have sufficient permissions?") );
 #if defined(Q_OS_LINUX)
         addList("-Is current user in sudoers group?");
 #endif
-        //QMessageBox(QMessageBox::Critical,"Error","Could not open port.",QMessageBox::Ok).exec();
+
     }
 }
 
@@ -296,60 +296,6 @@ void GCode::goToHomeAxis(char axis)
     emit endHomeAxis();
 }
 
-// Slot called from other threads (i.e. main window, grbl dialog, etc.)
-/*
- * reimplement to fit QSerilport
-void GCode::sendGcode(QString line)
-{
-    bool checkMeasurementUnits = false;
-
-
-    // empty line means we have just opened the com port
-    if (line.length() == 0)
-    {
-        resetState.set(false);
-
-        QString result;
-        if (!waitForStartupBanner(result, SHORT_WAIT_SEC, false))
-        {
-            if (shutdownState.get() || resetState.get())
-                return;
-        // it is possible that we are already connected and missed the
-        // signon banner. Force a reset (is this ok?) to get the banner
-/// LETARTARE for 0.845 !!
-            if (versionGrbl != "0.845")
-            {
-                emit addListOut("(CTRL-X)");
-
-                char buf[2] = {0};
-
-                buf[0] = CTRL_X;
-
-                diag(qPrintable(tr("SENDING: 0x%02X (CTRL-X) to check presence of Grbl\n")), buf[0])  ;
-                qDebug() << "sendgcode: " << buf[0];
-                if (sendToPort(buf))
-                    emit sendMsgSatusBar("");
-
-            }
-/// <--
-            if (!waitForStartupBanner(result, SHORT_WAIT_SEC, true))
-                return;
-        }
-/// T4 : to avoid loading too display
-/// to review ...
-        checkMeasurementUnits = true;
-       // checkMeasurementUnits = false;
-    }
-    else
-    {
-        pollPosWaitForIdle(false);
-        // normal send of actual commands
-        sendGcodeLocal(line, false);
-    }
-
-    pollPosWaitForIdle(checkMeasurementUnits);
-}
-*/
 
 void GCode::sendGcode(QString line)
 {
@@ -363,6 +309,7 @@ void GCode::sendGcode(QString line)
         portData.append(port->readAll());
     }
     QString result = QString(portData);
+    qDebug() << "sendGcode: " << result;
 
     // empty line means we have just opened the com port
     if (line.isEmpty())
@@ -771,11 +718,26 @@ qDebug() << "sentReqFor ";
 //          'setConfigureMmMode()':1, 'setConfigureInchesMode(':1
 QString GCode::getNumGrblUnit()
 {
-    QString resu("13"); // 0.8c  , 09d ??
+    QHash<QString,QString> grblUnit;
+    QString resu;
+
+    grblUnit["0.8c1"] = "14";
+    grblUnit["0.8c2"] = "14";
+    grblUnit["0.9d"] = "20";
+    grblUnit["0.9e"] = "19";
+    grblUnit["0.9f"] = "19";
+    grblUnit["0.9g"] = "13";
+
+    if (grblUnit.contains(versionGrbl))
+        resu = grblUnit.value(versionGrbl);
+    else
+         resu= "13"; // 0.8c  , 09d ??
+
+
  //   if (versionGrbl == "0.845")
  //       resu = "14";
  //   else
-    if (versionGrbl == "0.8c1" || versionGrbl == "0.8c2" )
+ /*    if (versionGrbl == "0.8c1" || versionGrbl == "0.8c2" )
         resu = "14";
     else
     if (versionGrbl == "0.9d")
@@ -786,7 +748,7 @@ QString GCode::getNumGrblUnit()
     else
     if (versionGrbl == "0.9g")
         resu = "13";
-
+*/
     return resu;
 }
 
@@ -1049,8 +1011,11 @@ bool GCode::waitForStartupBanner(QString& result, int waitSec, bool failOnNoFoun
 
     if (result.isEmpty())
     {
-        QString msg(tr("No data from COM port after connect. Expecting Grbl version string."));
+        QString msg(tr("No data from COM port after connect."));
         emit addList(msg);
+        addList("Expecting Grbl version string.");
+        addList("Note: since Gbrl-version >0.9");
+        addList("you have to use this baudrate: 115200");
         emit sendMsgSatusBar(msg);
 
     }else{
