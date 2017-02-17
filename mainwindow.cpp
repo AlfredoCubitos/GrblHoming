@@ -63,6 +63,7 @@ MainWindow::MainWindow(QWidget *parent) :
     // you should NOT subclass from QThread and override run(), rather,
     // attach your QOBJECT to a thread and use events (signals/slots) to communicate.
     gcode.moveToThread(&gcodeThread);
+
     runtimeTimer.moveToThread(&runtimeTimerThread);
 
     ui->lcdWorkNumberX->setDigitCount(8);
@@ -287,7 +288,7 @@ MainWindow::MainWindow(QWidget *parent) :
             portIndex = i;
     }
 
-    if (portIndex >= 0)
+  /*  if (portIndex >= 0)
     {
         // found matching port
         ui->cmbPort->setCurrentIndex(portIndex);
@@ -301,7 +302,7 @@ MainWindow::MainWindow(QWidget *parent) :
             ui->cmbPort->setCurrentIndex(ports.size());
         else
             ui->cmbPort->setCurrentIndex(0);
-    }
+    }*/
 
 
    // QList<qint32> baudRates = QSerialPortInfo::standardBaudRates();
@@ -874,6 +875,7 @@ void MainWindow::portIsClosed()
     ui->outputLines->setEnabled(false);
 
     ui->openFile->setEnabled(true);
+    ui->btnResetPort->setEnabled(false);
 
     {
     ui->Begin->setEnabled(false);
@@ -911,8 +913,8 @@ void MainWindow::portIsClosed()
 void MainWindow::portIsOpen(bool sendCode)
 {
     // Comm port successfully opened
-    if (sendCode)
-        sendGcode("");
+  /*  if (sendCode)
+        sendGcode("");*/
     openState = sendCode;
 }
 // called by 'GCode::axisAdj(...)'
@@ -956,6 +958,7 @@ void MainWindow::enableAllButtons(bool v)
     ui->outputLines->setEnabled(v);
 /// T3
     ui->openFile->setEnabled(v);
+    ui->btnResetPort->setEnabled(v);
     {  // enableBlockFile
     ui->Begin->setEnabled(v);
     ui->Stop->setEnabled(v);
@@ -978,6 +981,7 @@ void MainWindow::enableAllButtons(bool v)
 void MainWindow::enableGrblDialogButton()
 {
     ui->openFile->setEnabled(true);
+    ui->btnResetPort->setEnabled(true);
     ui->btnOpenPort->setEnabled(true);
     ui->btnOpenPort->setText(close_button_text);
     ui->btnOpenPort->setStyleSheet("* { background-color: rgb(255,125,100) }");
@@ -1286,6 +1290,7 @@ void MainWindow::preProcessFile(QString filepath)
         QTextStream code(&file);
         posList.clear();
 /// T4
+
         ui->visuGcode->clear() ;
         int plane = NO_PLANE;
         double x, y, z, i,  j, k ;
@@ -1318,6 +1323,7 @@ void MainWindow::preProcessFile(QString filepath)
         int n = strmax.size();
 
         code.seek(0);
+
         do
         {
             strline = code.readLine();
@@ -1338,8 +1344,9 @@ void MainWindow::preProcessFile(QString filepath)
 
             strline = strline.trimmed();
             g=0; p=0; fr=0.0; ss = 0.0;
-            if (strline.size() == 0)
+          if (strline.size() == 0)
             {   // ignore the white lines
+
             }
             else
             {
@@ -1375,8 +1382,10 @@ void MainWindow::preProcessFile(QString filepath)
 
         } while (code.atEnd() == false);
 
+
         /// number of lines
         strline = QString().setNum(index) ;
+
         ui->outputLines->setText(strline);
         /// write all lines
         ui->visuGcode->setPlainText(codeText);
@@ -1386,13 +1395,14 @@ void MainWindow::preProcessFile(QString filepath)
         /// to 'ui-visu3D::setTotalNumLine(QString)'
         emit setTotalNumLine(strline)  ;
         /// to 'ui->wgtVisualizer::setItems(posList)' and 'ui->visu3D::setItems(posList)'
-        emit setItems(posList);
+       emit setItems(posList);
         /// to to 'ui-visu3D::setFeedRateToLine(QList<double>)'
         emit setFeedRateToLine(feedRateToLine);
         /// to to 'ui-visu3D::setSpeedSpindleToLine(QList<double>)'
-        emit setSpeedSpindleToLine(speedSpindleToLine);
+       emit setSpeedSpindleToLine(speedSpindleToLine);
         // the correct unit
-        setUseMm(mm);
+       setUseMm(mm);
+
     }
     else
         printf("Can't open file\n");
@@ -2256,7 +2266,7 @@ void MainWindow::toVisual(bool valid)
     else
         ui->visualButton->setText(tr("Animate")) ;
     // no openFile if valid
-    ui->openFile->setEnabled(!valid);
+ //   ui->openFile->setEnabled(!valid);
     if (!valid) {  // no animate
         ui->btnCheck->setEnabled(openState);
         ui->Begin->setEnabled(openState);
@@ -2553,7 +2563,10 @@ void MainWindow::setUseMm(bool useMm)
     /// acces to "Options::checkBoxUseMmManualCmds"
     if (opt.getUseMm() != useMm ) {
 //diag("MainWindow::setUseMm(..) ...");
-        opt.setUseMm(useMm);
+        /**
+         * Todo: on bigger files this causes Segmentation fault
+          **/
+      //   opt.setUseMm(useMm);
     }
 }
 // calls : 'GCode::parseCoordinates(..)':2,
@@ -2602,4 +2615,5 @@ void MainWindow::setPortName(QString name)
         ui->le_portname->setText(pname);
 
     ui->btnOpenPort->setEnabled(true);
+    ui->openFile->setEnabled(true);
 }

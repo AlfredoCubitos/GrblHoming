@@ -29,7 +29,6 @@ else {
 	TRANSLATIONS += trlocale/GrblController_xx.ts
 	TRANSLATIONS += trlocale/GrblController_fr.ts
 
-include(QextSerialPort/qextserialport.pri)
 include(log4qt/log4qt.pri)
 
 SOURCES += main.cpp\

@@ -54,12 +54,12 @@ void GCode::openPort(QString commPortStr, QString baudRate)
     port->setFlowControl(QSerialPort::NoFlowControl);
 
 
-
-
     if (port->open(QIODevice::ReadWrite))
     {
+        waitForStartupBanner();
         emit portIsOpen(true);
-        emit sendMsgSatusBar("");
+        emit sendMsgSatusBar("");    
+
     }else{
         emit portIsClosed();
         QString msg = tr("Can't open COM port ") + commPortStr;
@@ -78,6 +78,19 @@ void GCode::openPort(QString commPortStr, QString baudRate)
 
     }
 }
+
+QByteArray GCode::getResult()
+{
+
+   QByteArray result = port->readAll();
+
+    //while (port->waitForReadyRead(PORT_WAIT_MSEC)) { // 5000 too long??
+      while (port->waitForReadyRead(10)) {
+        result.append(port->readAll());
+    }
+    return result;
+}
+
 
 void GCode::closePort()
 {
@@ -101,6 +114,7 @@ void GCode::setAbort()
 void GCode::setReset()
 {
     // cross-thread operation, only set one atomic variable in this method (bool in this case) or add critsec
+
     resetState.set(true);
 }
 
@@ -300,48 +314,17 @@ void GCode::goToHomeAxis(char axis)
 void GCode::sendGcode(QString line)
 {
     bool checkMeasurementUnits = false;
-    QByteArray portData;
-    qDebug() << "Line: " << line;
 
-    portData = port->readAll();
-
-    while (port->waitForReadyRead(PORT_WAIT_MSEC)) {
-        portData.append(port->readAll());
-    }
-    QString result = QString(portData);
-    qDebug() << "sendGcode: " << result;
 
     // empty line means we have just opened the com port
     if (line.isEmpty())
     {
-         resetState.set(false);
+        resetState.set(false);
 
+        if (!waitForStartupBanner())
+            return;
 
-         if (!waitForStartupBanner(result, PORT_WAIT_MSEC, false))
-         {
-             if (shutdownState.get() || resetState.get())
-                 return;
-
-             if (versionGrbl != "0.845")
-             {
-                 emit addListOut("(CTRL-X)");
-
-                 char buf[2] = {0};
-
-                 buf[0] = CTRL_X;
-
-                 diag(qPrintable(tr("SENDING: 0x%02X (CTRL-X) to check presence of Grbl\n")), buf[0])  ;
-                 qDebug() << "sendgcode: " << buf[0];
-                 if (sendToPort(buf))
-                     emit sendMsgSatusBar("");
-
-             }
-
-             if (!waitForStartupBanner(result, PORT_WAIT_MSEC, true))
-                 return;
-
-         }
-         checkMeasurementUnits = true;
+        checkMeasurementUnits = true;
     }
     else
     {
@@ -461,7 +444,8 @@ bool GCode::checkGrbl(const QString& result)
 				emit setVersionGrbl(resu);
 /// T4
 				versionGrbl = resu.mid(5) ;
-//diag("VersionGrbl ->%s<-", qPrintable(versionGrbl) );
+
+
 /// <--
             }
             /*
@@ -636,10 +620,12 @@ bool GCode::sendGcodeInternal(QString line, QString& result, bool recordResponse
 
      qint64 bytesWritten =port->write(buffer);
      qDebug() << "sendGcodeInternal" << line << "written:" << bytesWritten;
-     QByteArray data = port->readAll();
+   /*  QByteArray data = port->readAll();
 
      while(port->waitForReadyRead(PORT_WAIT_MSEC))
         data.append(port->readAll());
+        */
+     QByteArray data = getResult();
 
      QStringList dataList = QString(data).split("\r\n");
 
@@ -999,14 +985,16 @@ bool GCode::waitForOk(QString& result, int waitSec, bool sentReqForLocation,
 
 ///-----------------------------------------------------------------------------
 /**
- * @brief GCode::waitForStartupBanner
- * @param result -> needed?
- * @param waitSec -> in msec for QSerialPort::waitForReadyRead
- * @param failOnNoFound ?
+ * @brief GCode::waitForStartupBanner checks Grbl version after first connection
  * @return bool
  */
-bool GCode::waitForStartupBanner(QString& result, int waitSec, bool failOnNoFound)
+bool GCode::waitForStartupBanner()
 {
+
+    QByteArray result = getResult();
+
+    qDebug() << "sendGcode: " << result;
+
     bool status = true;
 
     if (result.isEmpty())
@@ -1021,16 +1009,14 @@ bool GCode::waitForStartupBanner(QString& result, int waitSec, bool failOnNoFoun
     }else{
         if (!checkGrbl(QString(result.trimmed())))
         {
-            if (failOnNoFound)
-            {
-                QString msg(tr("Expecting Grbl version string. Unable to parse response."));
-                emit addList(msg);
-                emit sendMsgSatusBar(msg);
 
-                closePort();
-            }
-            else
-                emit sendMsgSatusBar("");
+            QString msg(tr("Expecting Grbl version string. Unable to parse response."));
+            emit addList(msg);
+            emit sendMsgSatusBar(msg);
+
+            closePort();
+
+            emit sendMsgSatusBar("");
 
             status = false;
         }
@@ -1038,6 +1024,28 @@ bool GCode::waitForStartupBanner(QString& result, int waitSec, bool failOnNoFoun
         {
             emit enableGrblDialogButton();
         }
+        ///Todo: handle if there is no Version string
+        /// this is happend when the controller has no bootloader
+        /// or when some connect disconnect events occured e.g. disconnecting connecting the usb cable
+
+
+        /*if (versionGrbl != "0.845")
+        {
+            emit addListOut("(CTRL-X)");
+
+            char buf[2] = {0};
+
+            buf[0] = CTRL_X;
+
+            diag(qPrintable(tr("SENDING: 0x%02X (CTRL-X) to check presence of Grbl\n")), buf[0])  ;
+            qDebug() << "sendgcode: " << buf[0];
+            if (sendToPort(buf))
+                emit sendMsgSatusBar("");
+
+        }*/
+
+
+
     }
 
     qDebug() << result;

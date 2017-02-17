@@ -220,6 +220,7 @@ bool Options::getUseMm()
 {
 //diag("Options::checkBoxUseMmManualCmds->isChecked() = %s", ui->checkBoxUseMmManualCmds->isChecked()==true?"true":"false");
     return ui->checkBoxUseMmManualCmds->isChecked();
+
 }
 double Options::getZJogRate()
 {

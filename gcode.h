@@ -169,7 +169,7 @@ private:
     bool waitForOk(QString& result, int waitCount, bool sentReqForLocation,
                     bool sentRequestForSettings, bool sentReqForParserState,
                     bool aggressive, bool finalize);
-    bool waitForStartupBanner(QString& result, int waitSec = 5000, bool failOnNoFound=false);
+    bool waitForStartupBanner();
     bool sendGcodeInternal(QString line, QString& result, bool recordResponseOnFail, int waitSec, bool aggressive, int currLine = 0);
     QString reducePrecision(QString line);
     bool isGCommandValid(float value, bool& toEndOfLine);
@@ -193,6 +193,7 @@ private:
 /// T4
     QString getNumGrblUnit();
     bool sendToPort(const char *buf, QString txt=QString());
+    QByteArray getResult();
 
     void gotoPause();
 
