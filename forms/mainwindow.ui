@@ -12,8 +12,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1216</width>
-    <height>960</height>
+    <width>1100</width>
+    <height>880</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -3935,7 +3935,7 @@ Move the axis to the positive values</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1216</width>
+     <width>1100</width>
      <height>21</height>
     </rect>
    </property>
